@@ -186,12 +186,22 @@ class FeatureEngine:
             # 直接兜底到“单表全列基线”
             return self._build_baseline_X(pd.DataFrame(), self.target_field)
 
-        # y
-        if self.target_field not in base_df.columns:
-            # 没有目标列，也兜底为 0
-            y = pd.Series([0] * len(base_df), index=base_df.index, dtype=int)
+        # y (V1.3 修正: 使用与 baseline 一致的鲁棒查找逻辑)
+        y_col_name = None
+        normalized_target = self.target_field.lower().replace('_', '')
+        if self.target_field in base_df.columns:
+            y_col_name = self.target_field
         else:
-            y = base_df[self.target_field]
+            for c in base_df.columns:
+                if c.lower().replace('_', '') == normalized_target:
+                    y_col_name = c
+                    break
+        
+        if y_col_name:
+            y = base_df[y_col_name]
+        else:
+            y = pd.Series(0, index=base_df.index, dtype=int)
+
 
         # 2) X 初始化
         X = pd.DataFrame(index=base_df.index)
@@ -275,24 +285,39 @@ class FeatureEngine:
             return pd.DataFrame(), pd.Series(dtype=int), [], []
 
         df = df.copy()
-        if target_col not in df.columns:
-            df[target_col] = 0
+        
+        # y 强制为 0/1（保留原有映射）
+        # V1.2 修正：更鲁棒的大小写不敏感查找（处理下划线）
+        y_col_name = None
+        normalized_target = target_col.lower().replace('_', '')
+        if target_col in df.columns:
+            y_col_name = target_col
+        else:
+            for c in df.columns:
+                if c.lower().replace('_', '') == normalized_target:
+                    y_col_name = c
+                    break
+        
+        if y_col_name:
+            y = df[y_col_name]
+        else:
+            # 如果真的找不到，则创建全为0的列作为兜底
+            y = pd.Series(0, index=df.index)
 
         # y 强制为 0/1（保留原有映射）
-        y = df[target_col]
         if y.dtype == object:
             y = y.map({'yes': 1, 'no': 0, 'y': 1, 'n': 0}).fillna(y).astype(str)
             y = y.astype('category').cat.codes
         y = y.astype(int)
 
         # 一次性剔除目标列 + 禁用列
-        to_drop = {target_col} | (EXCLUDED_COLUMNS & set(df.columns))
-        X = df.drop(columns=list(to_drop), errors='ignore')
+        to_drop = {y_col_name, target_col} | (EXCLUDED_COLUMNS & set(df.columns))
+        X = df.drop(columns=[c for c in to_drop if c in df.columns], errors='ignore')
 
         numeric_features = X.select_dtypes(include=[np.number]).columns.tolist()
         categorical_features = [c for c in X.columns if c not in numeric_features]
 
-        print(f"[特征引擎-兜底] 使用全列表基线(已排除 {sorted(to_drop)}): "
+        print(f"[特征引擎-兜底] 使用全列表基线(已排除 {sorted([c for c in to_drop if c is not None])}): "
               f"num={len(numeric_features)}, cat={len(categorical_features)}, X形状={X.shape}")
         return X, y, numeric_features, categorical_features
 
@@ -415,14 +440,21 @@ class EvolutionaryEngine:
         # (未来可添加 Transform/Filter 基因)
 
     def initialize_population(self, size: int) -> List[ModelingChromosome]:
-        """V1.0 智能初始化：确保染色体可被评估"""
+        """V1.1 智能初始化 (动态特征数量)：确保染色体可被评估"""
         population = []
         if not self.feature_genes or not self.model_genes:
             raise ValueError("基因池中缺少必要的 FeatureGene 或 ModelGene！")
-            
+
+        total_features = len(self.feature_genes)
+        # 根据基因池大小，动态决定初始特征数量的范围
+        min_count = max(1, int(total_features * 0.1))
+        max_count = min(total_features, max(min_count, int(total_features * 0.3)))
+        print(f"[演化引擎] 动态初始化特征数范围: [{min_count}, {max_count}] (总特征池: {total_features})")
+
         for _ in range(size):
             genes = []
-            num_features = random.randint(1, 4) # 初始特征数量
+            # 从动态范围中随机选择特征数量
+            num_features = random.randint(min_count, max_count)
             genes.extend(random.sample(self.feature_genes, num_features))
             genes.append(random.choice(self.model_genes))
             population.append(ModelingChromosome(genes=genes))
@@ -456,18 +488,43 @@ class EvolutionaryEngine:
         return ModelingChromosome(genes=child_features + [model_gene])
 
     def mutate(self, chromosome: ModelingChromosome) -> ModelingChromosome:
-        """V1.0 变异"""
-        if random.random() < 0.2: # 20% 概率变异
-            genes = chromosome.genes
-            idx_to_mutate = random.randrange(len(genes))
-            gene_to_mutate = genes[idx_to_mutate]
-            
-            # 替换一个同类型的基因
-            if isinstance(gene_to_mutate, FeatureGene) and self.feature_genes:
-                genes[idx_to_mutate] = random.choice(self.feature_genes)
-            elif isinstance(gene_to_mutate, ModelGene) and self.model_genes:
-                genes[idx_to_mutate] = random.choice(self.model_genes)
-        
+        """V1.1 变异 (增加/删除/替换)"""
+        if random.random() < 0.3:  # 变异率提升到 30%
+            genes = chromosome.genes[:]  # 操作副本
+            mutation_roll = random.random()
+
+            # 20% 概率增加一个特征
+            if mutation_roll < 0.2 and self.feature_genes:
+                current_features = {g for g in genes if isinstance(g, FeatureGene)}
+                potential_additions = [g for g in self.feature_genes if g not in current_features]
+                if potential_additions:
+                    genes.append(random.choice(potential_additions))
+                    print("[变异] 增加基因")
+                    return ModelingChromosome(genes=genes)
+
+            # 20% 概率删除一个特征
+            elif mutation_roll < 0.4:
+                feature_genes_in_chromo = [g for g in genes if isinstance(g, FeatureGene)]
+                if len(feature_genes_in_chromo) > 1:  # 至少保留一个特征
+                    gene_to_remove = random.choice(feature_genes_in_chromo)
+                    genes.remove(gene_to_remove)
+                    print("[变异] 删除基因")
+                    return ModelingChromosome(genes=genes)
+
+            # 60% 概率替换一个基因 (原逻辑)
+            else:
+                if not genes: return chromosome
+                idx_to_mutate = random.randrange(len(genes))
+                gene_to_mutate = genes[idx_to_mutate]
+
+                if isinstance(gene_to_mutate, FeatureGene) and self.feature_genes:
+                    genes[idx_to_mutate] = random.choice(self.feature_genes)
+                    print("[变异] 替换特征基因")
+                elif isinstance(gene_to_mutate, ModelGene) and self.model_genes:
+                    genes[idx_to_mutate] = random.choice(self.model_genes)
+                    print("[变异] 替换模型基因")
+                return ModelingChromosome(genes=genes)
+
         return chromosome
 
 
@@ -483,10 +540,15 @@ if __name__ == "__main__":
     schema_map = semantic_inference.run_semantic_inference(MockDB())
     
     # 2. (真实) 实例化"翻译官"
-    translator = KnowledgeGraphTranslator(inferred_schema=schema_map)
+    TARGET_VARIABLE = "UserProfile.IsDefault" # 定义标准目标
+    translator = KnowledgeGraphTranslator(
+        inferred_schema=schema_map,
+        physical_target_table='tbl_user_01',
+        physical_target_column='is_default'
+    )
     
     # 3. (真实) 实例化"基因生成器"
-    gene_gen = GeneGenerator(translator, target_variable="UserProfile.IsDefault")
+    gene_gen = GeneGenerator(translator, target_variable=TARGET_VARIABLE)
     gene_pool = gene_gen.generate_initial_pool()
     
     # 4. (真实) 实例化"演化引擎"
@@ -494,7 +556,7 @@ if __name__ == "__main__":
     population = evo_engine.initialize_population(size=10) # 创建10个个体
     
     # 5. (真实) 实例化"特征引擎"和"评估器"
-    feature_engine = FeatureEngine(translator)
+    feature_engine = FeatureEngine(translator, standard_target_variable=TARGET_VARIABLE)
     fitness_evaluator = FitnessEvaluator(feature_engine)
     
     # 6. (关键测试) 评估一个"染色体"

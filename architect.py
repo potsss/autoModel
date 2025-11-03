@@ -25,8 +25,10 @@ import pandas as pd
 EXCLUDED_COLUMNS = {"duration"}  # 可按需扩展，比如 {"duration", "y"}
 # 新增：兜底所需的 sklearn 组件
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from lightgbm import LGBMClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
@@ -137,8 +139,14 @@ class GeneGenerator:
             except Exception as e:
                 print(f"[架构师-基因][兜底-异常] 自动构造 LATEST 特征失败: {e}")
 
-        # 4) 无论如何，确保有一个模型基因
-        gene_pool.append(ModelGene(alg="LogisticRegression", params={"solver": "liblinear", "class_weight": "balanced"}))
+        # 4) 无论如何，确保有多个模型基因
+        model_configs = [
+            {"alg": "LogisticRegression", "params": {"solver": "liblinear", "class_weight": "balanced", "random_state": 42}},
+            {"alg": "RandomForestClassifier", "params": {"n_estimators": 100, "max_depth": 10, "random_state": 42}},
+            {"alg": "LGBMClassifier", "params": {"n_estimators": 100, "learning_rate": 0.1, "num_leaves": 31, "random_state": 42, "verbose": -1}}
+        ]
+        for config in model_configs:
+            gene_pool.append(ModelGene(alg=config["alg"], params=config["params"]))
 
         # 5) 去重（以 path/op/window 为键），防止重复
         seen = set()
@@ -332,14 +340,18 @@ class FitnessEvaluator:
 
     def evaluate(self, chromosome: ModelingChromosome) -> Dict[str, Any]:
         """
-        执行完整的"评估"流程，并返回一个包含"分数"和"成本"的字典。
+        [V1.1] 执行完整的"评估"流程 (使用5-折交叉验证)，并返回一个包含"分数"和"成本"的字典。
         """
         start_time = time.time()
         
         try:
             # 1) 特征构造
             X, y, num_features, cat_features = self.feature_engine.build_features(chromosome)
-            print(f"[调试] X型={type(X)}, y型={type(y)}, X形状={getattr(X, 'shape', None)}, numN={len(num_features)}, catN={len(cat_features)}")
+
+            # 检查 y 是否包含多于一个类别
+            if y.nunique() < 2:
+                print(f"[评估错误] 目标变量 y 只包含一个类别，无法进行评估。")
+                return {'auc': 0.0, 'evaluation_time_ms': (time.time() - start_time) * 1000, 'error': 'Target variable has less than 2 classes.'}
 
             # 双保险：如果上游误入任何被禁用列，这里再一次剔除
             for bad_col in list(EXCLUDED_COLUMNS):
@@ -386,7 +398,19 @@ class FitnessEvaluator:
 
             # 3. 模型
             model_gene = next((g for g in chromosome.genes if isinstance(g, ModelGene)), None)
-            model = LogisticRegression(**model_gene.params) if (model_gene and model_gene.alg == 'LogisticRegression') else LogisticRegression(solver='liblinear')
+            if model_gene:
+                if model_gene.alg == 'LogisticRegression':
+                    model = LogisticRegression(**model_gene.params)
+                elif model_gene.alg == 'RandomForestClassifier':
+                    model = RandomForestClassifier(**model_gene.params)
+                elif model_gene.alg == 'LGBMClassifier':
+                    model = LGBMClassifier(**model_gene.params)
+                else: # Fallback
+                    print(f"[警告] 未知的模型算法: {model_gene.alg}，使用默认的 LogisticRegression。")
+                    model = LogisticRegression(solver='liblinear', random_state=42)
+            else: # Fallback if no model gene
+                print(f"[警告] 染色体中没有模型基因，使用默认的 LogisticRegression。")
+                model = LogisticRegression(solver='liblinear', random_state=42)
 
             # 4. Pipeline
             model_pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('classifier', model)])
@@ -404,24 +428,30 @@ class FitnessEvaluator:
             except Exception as _dtype_e:
                 print(f"[调试] y类型规范化失败: {str(_dtype_e)}")
 
-            # 5. 划分数据集
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.3, random_state=42, stratify=y
-            )
-
-            # 6/7. 训练与评估
+            # 5. [V1.1] K-折交叉验证
+            print("[调试] 开始5-折交叉验证...")
+            kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+            
+            # 6/7. 训练与评估 (使用 cross_val_score)
             try:
-                model_pipeline.fit(X_train, y_train)
-                print("[调试] 模型训练完成")
-                y_pred_proba = model_pipeline.predict_proba(X_test)[:, 1]
-                auc = roc_auc_score(y_test, y_pred_proba)
-                print(f"[调试] 评估完成，AUC={auc:.4f}")
+                scores = cross_val_score(model_pipeline, X, y, cv=kfold, scoring='roc_auc')
+                auc_mean = np.mean(scores)
+                auc_std = np.std(scores)
+                print(f"[调试] 交叉验证完成，AUCs={np.round(scores, 4)}, Mean AUC={auc_mean:.4f}, Std={auc_std:.4f}")
             except Exception as _fit_e:
-                print(f"[调试] 训练/评估阶段异常: {str(_fit_e)}")
+                print(f"[调试] 交叉验证阶段异常: {str(_fit_e)}")
+                if 'only one class' in str(_fit_e):
+                    return {'auc': 0.0, 'evaluation_time_ms': (time.time() - start_time) * 1000, 'error': str(_fit_e)}
                 raise
 
             evaluation_time_ms = (time.time() - start_time) * 1000
-            return {'auc': auc, 'evaluation_time_ms': evaluation_time_ms, 'feature_count': len(num_features) + len(cat_features)}
+            return {
+                'auc': auc_mean,  # 主适应度分数
+                'auc_mean': auc_mean,
+                'auc_std': auc_std,
+                'evaluation_time_ms': evaluation_time_ms, 
+                'feature_count': len(num_features) + len(cat_features)
+            }
 
         except Exception as e:
             print(f"[评估错误] {str(e)}")

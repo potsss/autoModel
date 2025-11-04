@@ -89,15 +89,27 @@ class KnowledgeGraphTranslator(KnowledgeGraphInterface):
                 # 合并到推断模式（不覆盖原有实体）
                 self.inferred_schema.update(fb)
 
-        self.standard_schema_cache = self._build_standard_schema_cache()
+        self.entity_map = {}
+        for entity_data in self.inferred_schema.get('entities', []):
+            entity_name = entity_data.get('name')
+            if entity_name:
+                self.entity_map[entity_name] = {
+                    "physical_table": entity_data.get('physical_table', list(self.db_tables.keys())[0] if self.db_tables else 'bank'),
+                    "fields": {
+                        col: {"physical_column": col} for col in entity_data.get('columns', [])
+                    }
+                }
         print("--- \"数据翻译官\"模块初始化完毕，内存数据库已创建 ---")
 
-    def _find_entity_by_physical_name(self, schema: Dict[str, Any], physical_name: str) -> Optional[Tuple[str, Dict[str, Any]]]:
-        """辅助函数：根据物理表名查找实体"""
-        for entity_name, entity_data in schema.items():
-            if entity_data.get('physical_table') == physical_name:
-                return entity_name, entity_data
-        return None, None
+    def _find_entity_by_physical_name(self, schema, physical_name):
+        """根据物理表名查找标准实体"""
+        for entity_data in schema.get('entities', []):
+            # This is a simplification, assuming physical_table is part of the entity name or a property.
+            if physical_name in entity_data.get('name', '').lower() or physical_name == entity_data.get('physical_table'):
+                return entity_data.get('name'), entity_data
+        # Fallback for V1.1
+        print(f"[翻译官] 找不到与物理表 '{physical_name}' 完全匹配的实体，将使用启发式规则。")
+        return "BankRecord", {"fields": {}}
 
     def _find_physical_col_by_semantic_name(self, entity_schema: Dict[str, Any], semantic_name: str) -> Optional[str]:
         """辅助函数：根据标准字段名查找物理列名"""
@@ -132,7 +144,7 @@ class KnowledgeGraphTranslator(KnowledgeGraphInterface):
             income_col = self._find_physical_col_by_semantic_name(user_schema, 'AnnualIncome')
             gender_col = self._find_physical_col_by_semantic_name(user_schema, 'Gender')
             reg_dt_col = self._find_physical_col_by_semantic_name(user_schema, 'RegistrationDate')
-            target_col = physical_target_column # 这个已经是物理名称，直接使用
+            target_col = self._find_physical_col_by_semantic_name(user_schema, 'IsDefault') or physical_target_column
 
             # 3. 创建用户表 DataFrame
             user_ids_data = [f"user_{i}" for i in range(num_users)]
@@ -197,11 +209,16 @@ class KnowledgeGraphTranslator(KnowledgeGraphInterface):
             }
         }
 
-    def _build_standard_schema_cache(self) -> Dict[str, List[str]]:
-        """辅助函数：从\"推断模式\"构建\"标准模式\"菜单"""
+    def _build_standard_schema_cache(self):
+        """
+        [V1.1] 创建一个简化的标准 Schema 缓存，用于基因生成。
+        格式: { "EntityName": ["field1", "field2"], ... }
+        """
         standard_schema = {}
-        for entity_name, entity_data in self.inferred_schema.items():
-            standard_schema[entity_name] = list(entity_data['fields'].keys())
+        for entity_data in self.inferred_schema.get('entities', []):
+            entity_name = entity_data.get('name')
+            if entity_name and 'columns' in entity_data:
+                standard_schema[entity_name] = entity_data['columns']
         return standard_schema
 
     # --- 接口实现 ---
@@ -279,10 +296,13 @@ class KnowledgeGraphTranslator(KnowledgeGraphInterface):
         """
         [V1.1 实现] 根据物理名称反向查找标准名称。
         """
-        for entity_name, entity_data in inferred_schema.items():
-            if entity_data.get('physical_table') == physical_table:
-                for field_name, field_data in entity_data.get('fields', {}).items():
-                    if field_data.get('physical_column') == physical_column:
+        for entity_data in inferred_schema.get('entities', []):
+            entity_name = entity_data.get('name')
+            # This is a simplification, assuming physical_table is part of the entity name or a property.
+            # A more robust solution would have a 'physical_table' field in the schema.
+            if physical_table in entity_data.get('name', '').lower() or physical_table == entity_data.get('physical_table'):
+                for field_name in entity_data.get('columns', []):
+                    if field_name.lower() == physical_column.lower():
                         print(f"  [翻译官] 成功将物理目标 '{physical_table}.{physical_column}' 映射到标准目标 '{entity_name}.{field_name}'")
                         return {'entity': entity_name, 'field': field_name}
         # fallback

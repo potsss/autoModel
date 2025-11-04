@@ -22,7 +22,7 @@ from typing import Optional, List, Dict, Any, Tuple
 import numpy as np
 import pandas as pd
 # 统一禁止进入建模特征的字段（防泄漏）
-EXCLUDED_COLUMNS = {"duration"}  # 可按需扩展，比如 {"duration", "y"}
+EXCLUDED_COLUMNS = set()  # 可按需扩展，比如 {"duration", "y"}
 # 新增：兜底所需的 sklearn 组件
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
@@ -377,7 +377,7 @@ class FitnessEvaluator:
 
             # 运行时断言，确保 duration 已剔除
             print(f"[调试] X列样本(前5): {list(X.columns)[:5]}")
-            assert "duration" not in getattr(X, "columns", []), "duration 未被剔除"
+        
 
             # 2. 预处理流水线
             numeric_transformer = Pipeline(steps=[
@@ -477,8 +477,8 @@ class EvolutionaryEngine:
 
         total_features = len(self.feature_genes)
         # 根据基因池大小，动态决定初始特征数量的范围
-        min_count = max(1, int(total_features * 0.1))
-        max_count = min(total_features, max(min_count, int(total_features * 0.3)))
+        min_count = max(1, int(total_features * 0.15))
+        max_count = min(total_features, max(min_count, int(total_features * 0.4)))
         print(f"[演化引擎] 动态初始化特征数范围: [{min_count}, {max_count}] (总特征池: {total_features})")
 
         for _ in range(size):

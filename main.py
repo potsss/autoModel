@@ -35,7 +35,7 @@ class ControlUnit:
         print("[控制单元] 正在启动...")
         
         # --- 1. (感知) 运行"语义推断" ---
-        schema_map = semantic_inference.run_semantic_inference(db_conn=None)
+        schema_map = semantic_inference.run_semantic_inference(dataframes=dataframes)
         
         # --- 2. (V1.2 修正) 解耦：先查找标准目标，再实例化翻译官 ---
         target_info = KnowledgeGraphTranslator.get_standard_target_info(
@@ -185,7 +185,7 @@ if __name__ == "__main__":
 
     # 1.1 读取本地 CSV（分隔符 ';'）
     from pathlib import Path
-    CSV_PATH = Path(r"F:\code1\bank-additional-full.csv")
+    CSV_PATH = Path(__file__).parent / "bank-additional-full.csv"
     assert CSV_PATH.exists(), f"找不到数据文件：{CSV_PATH}"
     df = pd.read_csv(CSV_PATH, sep=";", encoding="utf-8")
     if df["y"].dtype == "object":

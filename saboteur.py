@@ -123,7 +123,7 @@ class CausalAttacker(BaseAttacker):
             return penalty
             
         except Exception as e:
-            print(f"[破坏者-因果-错误] LLM 占位符调用失败: {e}")
+            print(f"[破坏者-因果-错误] LLM 占位符调用失败: {type(e)} - {e}")
             return 0.1 # 给予一个小的默认惩罚
 
 

@@ -15,13 +15,13 @@ import abc
 from typing import List, Dict, Optional, Any
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ModelingGene(abc.ABC):
     """建模基因的抽象基类"""
     pass
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class FeatureGene(ModelingGene):
     """
     特征基因：定义一个特征的提取方式。
@@ -37,7 +37,7 @@ class FeatureGene(ModelingGene):
         return f"{self.op}({self.path})"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class TransformGene(ModelingGene):
     """
     变换基因：定义一个数据变换操作。
@@ -50,7 +50,7 @@ class TransformGene(ModelingGene):
         return f"{self.op}(on {self.inputs})"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ModelGene(ModelingGene):
     """模型基因：定义使用的算法和超参数"""
     alg: str  # 算法名称, 例如 'LogisticRegression', 'XGBoost'
@@ -60,7 +60,7 @@ class ModelGene(ModelingGene):
         return f"Model({self.alg})"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class FilterGene(ModelingGene):
     """
     过滤基因：定义数据的筛选条件。

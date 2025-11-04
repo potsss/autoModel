@@ -16,6 +16,7 @@ from openai import OpenAI
 from typing import List, Dict, Any, Optional
 import pandas as pd
 
+
 # --- 客户端初始化 ---
 # 使用您提供的真实 LLM 接口信息
 # 注意: 为简化操作，此处直接使用您提供的信息。在生产环境中，强烈建议使用环境变量来管理密钥。
@@ -33,8 +34,6 @@ def _call_llm(prompt: str, is_json: bool = True) -> Optional[str]:
             {"role": "user", "content": prompt}
         ]
         
-        # 对于兼容OpenAI的接口，response_format参数可能不是所有模型都支持
-        # 如果遇到问题，可以移除这个参数，并在prompt中更强地约束模型输出JSON
         response_format = {"type": "json_object"} if is_json else {"type": "text"}
 
         response = client.chat.completions.create(
@@ -43,61 +42,66 @@ def _call_llm(prompt: str, is_json: bool = True) -> Optional[str]:
             # response_format=response_format # 如果您的模型不支持此参数，请注释掉此行
         )
         return response.choices[0].message.content
+    except ConnectionError as e:
+        print(f"[LLM Real - 错误] API 连接失败: {e}")
+        return None
+    except TypeError as e:
+        print(f"[LLM Real - 错误] API 调用时发生类型错误: {e}")
+        return None
     except Exception as e:
         print(f"[LLM Real - 错误] API 调用失败: {e}")
         return None
 
-def llm_infer_schema(
-    db_conn: Any, 
-    raw_schema_info: Dict[str, List[str]], 
-    sample_data: Dict[str, Any]
-) -> Dict[str, Any]:
+def llm_infer_schema(raw_schema_info: Dict[str, Any], sample_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     [真实实现] 使用 LLM 进行"语义推断"。
     """
     print("\n[LLM Real] 正在调用真实 LLM API 进行\"语义推断\"...")
     
     prompt = f"""
-    你是一个数据库专家，你的任务是分析一个原始的、命名混乱的数据库模式，并推断出其背后干净、标准的业务语义。
+    作为一名数据架构师，请根据原始的数据库表结构和数据样本，推断出业务层面的逻辑“实体”和它们之间的“关系”。
 
-    这是原始的数据库信息：
-    1. 表结构: {json.dumps(raw_schema_info, indent=2)}
-    2. 表内数据抽样: { {k: v.to_dict('list') for k, v in sample_data.items()} }
+    这是我原始的数据库表和列:
+    {json.dumps(raw_schema_info, indent=2)}
 
-    请根据以上信息，为我生成一个JSON格式的“推断模式”，需要包含以下内容：
-    1.  将物理表名（如 'tbl_user_01'）映射到有意义的业务实体名（如 'UserProfile'）。
-    2.  对于每个实体，将其混乱的物理列名（如 'col_xyz_01'）映射到标准的业务字段名（如 'AnnualIncome'）。
-    3.  为每个字段提供类型（id, numeric, categorical, datetime, foreign_key, target）和简短的描述。
-    4.  如果发现外键关系，请在 'references' 字段中明确指出其关联的标准实体和字段（如 'UserProfile.UserID'）。
+    这是每个表的一些数据样本:
+    {json.dumps(sample_data, indent=2)}
 
-    请严格按照以下JSON结构输出，不要包含任何额外的解释或Markdown标记：
+    请为我生成一个描述业务逻辑的JSON。这个JSON应该包含：
+    1.  `entities`: 一个实体列表。每个实体应有 `name` (例如 "UserProfile") 和 `primary_key`。
+    2.  `relationships`: 一个关系列表。每个关系应描述两个实体如何通过外键关联，包括 `from_entity`, `to_entity`, `from_column`, `to_column`。
+
+    请严格按照以下JSON格式输出，不要包含任何额外的解释或Markdown标记：
     {{
-      "BusinessEntityName": {{
-        "physical_table": "raw_table_name",
-        "fields": {{
-          "StandardFieldName": {{
-            "physical_column": "raw_column_name",
-            "type": "field_type",
-            "description": "description of the field"
-          }}
+      "entities": [
+        {{
+          "name": "EntityName",
+          "primary_key": "id",
+          "columns": ["id", "field1", "field2"]
         }}
-      }}
+      ],
+      "relationships": [
+        {{
+          "from_entity": "Entity1",
+          "to_entity": "Entity2",
+          "from_column": "entity2_id",
+          "to_column": "id"
+        }}
+      ]
     }}
     """
-    
     response_str = _call_llm(prompt)
     if response_str:
         try:
-            # LLM的返回可能包含Markdown代码块，需要先清理
             clean_response_str = response_str.strip().replace('```json', '').replace('```', '')
-            inferred_schema = json.loads(clean_response_str)
-            print("  (真实 LLM 已成功返回\"推断模式\")")
-            return inferred_schema
+            schema_dict = json.loads(clean_response_str)
+            print(f"  (真实 LLM 已成功返回推断的模式)")
+            return schema_dict
         except json.JSONDecodeError:
             print(f"  (真实 LLM 返回了无效的JSON, 内容: {response_str})")
-            return {{}}
-    return {{}}
-
+            # Fallback to a simple schema if LLM fails
+            return { "entities": [], "relationships": [] }
+    return { "entities": [], "relationships": [] }
 
 def llm_generate_genes(
     standard_schema: Dict[str, List[str]], 
@@ -182,5 +186,5 @@ def llm_critique_causality(
             return critique_dict
         except json.JSONDecodeError:
             print(f"  (真实 LLM 返回了无效的JSON, 内容: {response_str})")
-            return {{'risk_score': 0.1, 'justification': 'LLM response was not valid JSON.'}}
-    return {{'risk_score': 0.1, 'justification': 'LLM API call failed.'}}
+            return {'risk_score': 0.1, 'justification': 'LLM response was not valid JSON.'}
+    return {'risk_score': 0.1, 'justification': 'LLM API call failed.'}

@@ -178,32 +178,60 @@ class ControlUnit:
 
 
 if __name__ == "__main__":
+    from pathlib import Path
+
+    # --- 配置区域 ---
+    # 1. 指定数据文件夹的路径
+    #    使用 Path('.') 表示当前文件夹
+    DATA_FOLDER_PATH = Path(__file__).parent / "dataset_bank"
+
+    # 2. 指定包含目标预测列的表名（必须与CSV文件名一致，不含.csv后缀）
+    PHYSICAL_TARGET_TABLE = "bank-additional-full"
     
-    # 1. (V1.1 修改) 定义我们的业务目标，使用物理名称
-    PHYSICAL_TARGET_TABLE = "bank"
+    # 3. 指定目标预测列的列名
     PHYSICAL_TARGET_COLUMN = "y"
 
-    # 1.1 读取本地 CSV（分隔符 ';'）
-    from pathlib import Path
-    CSV_PATH = Path(__file__).parent / "bank-additional-full.csv"
-    assert CSV_PATH.exists(), f"找不到数据文件：{CSV_PATH}"
-    df = pd.read_csv(CSV_PATH, sep=";", encoding="utf-8")
-    if df["y"].dtype == "object":
-        df["y"] = (df["y"].astype(str).str.lower() == "yes").astype(int)
+    # --- 数据自动加载逻辑 ---
+    all_dataframes = {}
+    print(f"[数据] 正在从文件夹 '{DATA_FOLDER_PATH}' 加载所有CSV文件...")
 
-    # 1.3 打印确认日志（表名、shape、y分布）
-    print(f"[数据] 已加载表 '{PHYSICAL_TARGET_TABLE}'，shape={df.shape}")
-    print("[数据] 目标列分布（y=1比例）：", round(df[PHYSICAL_TARGET_COLUMN].mean(), 6))
-    print(df[PHYSICAL_TARGET_COLUMN].value_counts().to_dict())
+    csv_files = list(DATA_FOLDER_PATH.glob("*.csv"))
+    assert len(csv_files) > 0, f"在文件夹 '{DATA_FOLDER_PATH}' 中未找到任何CSV文件。"
 
-    # 2. 实例化"总指挥部"（将外部表注入 Translator）
+    for csv_path in csv_files:
+        table_name = csv_path.stem  # 使用文件名（不含后缀）作为表名
+        try:
+            # 尝试用不同的分隔符读取，以提高兼容性
+            df = pd.read_csv(csv_path, sep=";", encoding="utf-8")
+        except Exception:
+            df = pd.read_csv(csv_path, encoding="utf-8")
+
+        # 如果当前表是目标表，特殊处理目标列
+        if table_name == PHYSICAL_TARGET_TABLE:
+            if PHYSICAL_TARGET_COLUMN in df.columns and df[PHYSICAL_TARGET_COLUMN].dtype == "object":
+                df[PHYSICAL_TARGET_COLUMN] = (df[PHYSICAL_TARGET_COLUMN].astype(str).str.lower() == "yes").astype(int)
+        
+        all_dataframes[table_name] = df
+        print(f"  [数据] 已加载表 '{table_name}'，shape={df.shape}")
+
+    # --- 运行前检查 ---
+    assert PHYSICAL_TARGET_TABLE in all_dataframes, f"目标表 '{PHYSICAL_TARGET_TABLE}' 未在数据文件夹中找到。"
+    main_df = all_dataframes[PHYSICAL_TARGET_TABLE]
+    assert PHYSICAL_TARGET_COLUMN in main_df.columns, f"目标列 '{PHYSICAL_TARGET_COLUMN}' 在表 '{PHYSICAL_TARGET_TABLE}' 中不存在。"
+
+    # 打印目标列的分布
+    print(f"[数据] 目标表 '{PHYSICAL_TARGET_TABLE}' 中，目标列 '{PHYSICAL_TARGET_COLUMN}' 的分布情况：")
+    print(main_df[PHYSICAL_TARGET_COLUMN].value_counts().to_dict())
+
+    # --- 系统启动 ---
+    # 实例化"总指挥部"，并传入包含所有表的字典
     control_unit = ControlUnit(
         physical_target_table=PHYSICAL_TARGET_TABLE, 
         physical_target_column=PHYSICAL_TARGET_COLUMN,
-        dataframes={PHYSICAL_TARGET_TABLE: df}
+        dataframes=all_dataframes
     )
     
-    # 3. 运行共演化
+    # 运行共演化
     control_unit.run(
         generations=3,          # 运行 3 个世代 (用于快速测试)
         population_size=10,      # 每代 10 个个体

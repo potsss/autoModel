@@ -81,14 +81,15 @@ class ControlUnit:
         
         print("[控制单元] 系统初始化完毕，准备就绪。")
 
-    def run(self, generations: int, population_size: int, challenge_interval: int):
+    def run(self, generations: int, population_size: int, challenge_interval: int, evo_config: Dict[str, Any]):
         """
         运行"对抗性共演化"V1.0 主循环
+        V1.3: 接收evo_config
         """
         print("\n--- V1.0 \"对抗性共演化\"开始 ---")
         
         # 1. 初始化种群
-        population = self.evo_engine.initialize_population(population_size)
+        population = self.evo_engine.initialize_population(population_size, config=evo_config)
         
         for gen in range(generations):
             print(f"\n--- 世代 {gen+1}/{generations} ---")
@@ -105,7 +106,6 @@ class ControlUnit:
             for chromosome in population:
                 
                 # 2a. (创造) 评估基础性能 (来自 FitnessEvaluator)
-                # eval_result = {'auc': 0.8, 'evaluation_time_ms': 150.0, 'feature_count': 5}
                 eval_result = self.fitness_evaluator.evaluate(chromosome)
                 evaluation_results.append(eval_result)
                 
@@ -135,26 +135,25 @@ class ControlUnit:
             print(f"  [统计] 平均综合得分: {np.mean(comprehensive_scores):.4f} (最高: {max(comprehensive_scores):.4f})")
             
             # 4. (创造) 选择与演化阶段
-            # (关键!) "选择"操作基于"综合得分"
             selected = self.evo_engine.select(population, comprehensive_scores)
             
             # 5. (创造) 生成下一代 (交叉与变异)
             next_population = []
-            for i in range(0, population_size - 1, 2): # 保留一个空位给精英
+            # 精英保留策略：保留上一代最好的个体
+            best_individual_index = np.argmax(comprehensive_scores)
+            next_population.append(population[best_individual_index])
+
+            while len(next_population) < population_size:
                 p1, p2 = random.sample(selected, 2)
                 child = self.evo_engine.crossover(p1, p2)
                 child = self.evo_engine.mutate(child)
                 next_population.append(child)
             
-            # (精英保留策略)
-            best_individual_index = np.argmax(comprehensive_scores)
-            next_population.append(population[best_individual_index])
-            population = next_population
+            population = next_population[:population_size]
 
             # 6. (控制) 动态重构适应度函数 (周期性触发)
             if (gen + 1) % challenge_interval == 0:
                 print(f"\n[控制单元] 触发\"权重动态更新\"！(对抗压力增加)")
-                # 增加对因果和经济性的惩罚权重 (使其更负)
                 self.fitness_weights['causal'] = round(self.fitness_weights['causal'] * 1.2, 2)
                 self.fitness_weights['economics'] = round(self.fitness_weights['economics'] * 1.1, 2)
                 print(f"[控制单元] 新权重: Causal={self.fitness_weights['causal']:.2f}, Economics={self.fitness_weights['economics']:.2f}")
@@ -172,7 +171,6 @@ class ControlUnit:
         print(f"  - 特征数量: {final_champion_eval.get('feature_count', 0)}")
         print(f"  - 最终基因:")
         
-        # 使用 json.dumps 来优雅地打印
         print(json.dumps(final_champion, default=lambda o: o.__dict__, indent=4, ensure_ascii=False))
         return final_champion
 
@@ -181,15 +179,22 @@ if __name__ == "__main__":
     from pathlib import Path
 
     # --- 配置区域 ---
-    # 1. 指定数据文件夹的路径
-    #    使用 Path('.') 表示当前文件夹
-    DATA_FOLDER_PATH = Path(__file__).parent / "dataset_bank"
+    DATA_FOLDER_PATH = Path(__file__).parent / "dataset_huanji"
+    PHYSICAL_TARGET_TABLE = "huanji"
+    PHYSICAL_TARGET_COLUMN = "flag"
 
-    # 2. 指定包含目标预测列的表名（必须与CSV文件名一致，不含.csv后缀）
-    PHYSICAL_TARGET_TABLE = "bank-additional-full"
-    
-    # 3. 指定目标预测列的列名
-    PHYSICAL_TARGET_COLUMN = "y"
+    # --- V1.3 新增：演化参数配置 ---
+    # 在这里调整，无需修改核心代码
+    EVOLUTION_CONFIG = {
+        "generations": 10,          # 增加演化世代
+        "population_size": 20,     # 增加种群规模
+        "challenge_interval": 3,    # 对抗压力更新周期
+        "evo_feature_config": {
+            "min_features_ratio": 0.20,  # 最小特征数比例 (占总基因池)
+            "max_features_ratio": 0.50,  # 最大特征数比例
+            "max_features_floor": 10     # 最大特征数保底下限
+        }
+    }
 
     # --- 数据自动加载逻辑 ---
     all_dataframes = {}
@@ -199,14 +204,12 @@ if __name__ == "__main__":
     assert len(csv_files) > 0, f"在文件夹 '{DATA_FOLDER_PATH}' 中未找到任何CSV文件。"
 
     for csv_path in csv_files:
-        table_name = csv_path.stem  # 使用文件名（不含后缀）作为表名
+        table_name = csv_path.stem
         try:
-            # 尝试用不同的分隔符读取，以提高兼容性
-            df = pd.read_csv(csv_path, sep=";", encoding="utf-8")
+            df = pd.read_csv(csv_path, sep="$", encoding="utf-8")
         except Exception:
             df = pd.read_csv(csv_path, encoding="utf-8")
 
-        # 如果当前表是目标表，特殊处理目标列
         if table_name == PHYSICAL_TARGET_TABLE:
             if PHYSICAL_TARGET_COLUMN in df.columns and df[PHYSICAL_TARGET_COLUMN].dtype == "object":
                 df[PHYSICAL_TARGET_COLUMN] = (df[PHYSICAL_TARGET_COLUMN].astype(str).str.lower() == "yes").astype(int)
@@ -219,21 +222,20 @@ if __name__ == "__main__":
     main_df = all_dataframes[PHYSICAL_TARGET_TABLE]
     assert PHYSICAL_TARGET_COLUMN in main_df.columns, f"目标列 '{PHYSICAL_TARGET_COLUMN}' 在表 '{PHYSICAL_TARGET_TABLE}' 中不存在。"
 
-    # 打印目标列的分布
     print(f"[数据] 目标表 '{PHYSICAL_TARGET_TABLE}' 中，目标列 '{PHYSICAL_TARGET_COLUMN}' 的分布情况：")
     print(main_df[PHYSICAL_TARGET_COLUMN].value_counts().to_dict())
 
     # --- 系统启动 ---
-    # 实例化"总指挥部"，并传入包含所有表的字典
     control_unit = ControlUnit(
         physical_target_table=PHYSICAL_TARGET_TABLE, 
         physical_target_column=PHYSICAL_TARGET_COLUMN,
         dataframes=all_dataframes
     )
     
-    # 运行共演化
+    # 运行共演化，并传入配置
     control_unit.run(
-        generations=3,          # 运行 3 个世代 (用于快速测试)
-        population_size=10,      # 每代 10 个个体
-        challenge_interval=2     # 每 2 个世代增加一次对抗压力
+        generations=EVOLUTION_CONFIG["generations"],
+        population_size=EVOLUTION_CONFIG["population_size"],
+        challenge_interval=EVOLUTION_CONFIG["challenge_interval"],
+        evo_config=EVOLUTION_CONFIG["evo_feature_config"]
     )

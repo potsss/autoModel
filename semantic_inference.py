@@ -58,7 +58,8 @@ def run_semantic_inference(dataframes: Dict[str, pd.DataFrame]) -> Dict[str, Any
     #    注意：我们将原始schema和样本数据都传给它
     inferred_schema = llm_infer_schema(
         raw_schema_info=raw_schema, 
-        sample_data=sample_data
+        sample_data=sample_data,
+        num_tables=len(dataframes)
     )
     
     print("--- \"语义推断\"模块完成 ---")

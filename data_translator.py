@@ -76,11 +76,10 @@ class KnowledgeGraphTranslator(KnowledgeGraphInterface):
         missing_table = entity_schema is None
         missing_target_col = True
         if not missing_table:
-            # 检查该实体是否包含目标列映射
-            for f_std, f_map in entity_schema.get('fields', {}).items():
-                if f_map.get('physical_column') == physical_target_column:
-                    missing_target_col = False
-                    break
+            # 检查该实体是否包含目标列
+            # LLM返回的实体schema中，列信息在 'columns' 列表中
+            if physical_target_column in entity_schema.get('columns', []):
+                missing_target_col = False
 
         if missing_table or missing_target_col:
             fb = self._simple_schema_fallback(physical_target_table, physical_target_column)
@@ -100,6 +99,7 @@ class KnowledgeGraphTranslator(KnowledgeGraphInterface):
                     }
                 }
         print("--- \"数据翻译官\"模块初始化完毕，内存数据库已创建 ---")
+        self.standard_schema_cache = self._build_standard_schema_cache()
 
     def _find_entity_by_physical_name(self, schema, physical_name):
         """根据物理表名查找标准实体"""
@@ -235,14 +235,27 @@ class KnowledgeGraphTranslator(KnowledgeGraphInterface):
         """
         print(f"  [翻译官] 收到请求: 获取实体 '{entity_name}'...")
         try:
+            entity_data = None
+            for ent in self.inferred_schema.get('entities', []):
+                if ent.get('name') == entity_name:
+                    entity_data = ent
+                    break
+            
+            if entity_data is None:
+                raise KeyError(f"实体 '{entity_name}' 未在推断模式中找到。")
+
             # 1. 找到物理表
-            physical_table_name = self.inferred_schema[entity_name]['physical_table']
+            physical_table_name = entity_data['physical_table']
             df_raw = self.db_tables[physical_table_name].copy()
             
             # 2. (关键) 重命名列，从"物理名" -> "标准名"
             rename_map = {}
-            for std_name, mapping in self.inferred_schema[entity_name]['fields'].items():
-                rename_map[mapping['physical_column']] = std_name
+            # LLM返回的实体schema中，列信息在 'columns' 列表中
+            for col_name in entity_data.get('columns', []):
+                # Assuming standard name is the same as physical column name for now,
+                # or that LLM provides a mapping if different.
+                # For simplicity, we'll map physical column to itself if no explicit mapping.
+                rename_map[col_name] = col_name
             
             df_renamed = df_raw.rename(columns=rename_map)
             print(f"  [翻译官] 返回 '{entity_name}' (来自 {physical_table_name})，{len(df_renamed)} 行。")

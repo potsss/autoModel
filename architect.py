@@ -37,129 +37,134 @@ from sklearn.pipeline import Pipeline
 # 导入我们项目中的其他模块
 from core_structures import ModelingGene, FeatureGene, TransformGene, ModelGene, FilterGene, ModelingChromosome
 from knowledge_graph_interface import KnowledgeGraphInterface
-from llm_interface import llm_generate_genes
+from llm_interface import llm_generate_cross_table_genes
 
 
 class GeneGenerator:
     """
-    负责调用 LLM (占位符) 来动态生成初始基因池。
+    V1.2: 采用混合策略生成基因。
+    - 单表场景: 完全使用机器筛选（相关性分析）。
+    - 多表场景: 主表使用机器筛选，副表使用LLM进行跨表特征创造。
     """
     def __init__(self, translator: KnowledgeGraphInterface, target_variable: str):
         self.translator = translator
         self.target_variable = target_variable
+        self.primary_entity_name, self.target_field = target_variable.split('.')
+
+    def _machine_screen_features(self, entity_name: str, top_k: int = 40) -> List[FeatureGene]:
+        """
+        V1.3: 使用一个预训练的LGBM模型来筛选Top-K最重要的特征。
+        这比简单的相关性分析更能捕捉非线性关系。
+        """
+        print(f"[架构师-基因][机器筛选 V1.3] 正在对实体 '{entity_name}' 进行LGBM重要性筛选...")
+        df = self.translator.get_entity_dataframe(entity_name)
+        if df is None or df.empty:
+            return []
+
+        if self.target_field not in df.columns:
+            return []
+
+        y = df[self.target_field]
+        X = df.drop(columns=[self.target_field])
+
+        # 对类别型特征进行处理，以便LGBM可以接受
+        for col in X.select_dtypes(include=['object', 'category']).columns:
+            X[col] = X[col].astype('category')
+
+        # 训练一个简单的LGBM模型
+        lgbm = LGBMClassifier(random_state=42, verbose=-1)
+        try:
+            lgbm.fit(X, y)
+        except Exception as e:
+            print(f"[机器筛选-错误] 预训练LGBM失败: {e}，将回退到随机选择。")
+            # 如果训练失败（例如，数据问题），随机选择一些列作为兜底
+            fallback_cols = list(X.columns)
+            random.shuffle(fallback_cols)
+            selected_cols = fallback_cols[:top_k]
+            return [FeatureGene(op='LATEST', path=f"{entity_name}.{col}") for col in selected_cols]
+
+        # 获取特征重要性并排序
+        feature_importances = pd.Series(lgbm.feature_importances_, index=X.columns)
+        top_k_features = feature_importances.nlargest(top_k).index.tolist()
+
+        print(f"  [机器筛选] 发现 Top-{len(top_k_features)} LGBM重要特征: {top_k_features[:10]}...")
+
+        # 生成基因
+        genes = [FeatureGene(op='LATEST', path=f"{entity_name}.{col}") for col in top_k_features]
+        return genes
 
     def generate_initial_pool(self) -> List[ModelingGene]:
         """
-        调用 LLM 占位符获取基因创意；若 LLM 返回无效/为空，则从目标实体自动构造 LATEST 特征。
-        始终追加至少一个 ModelGene，保证后续遗传流程能启动。
+        V1.2 混合策略实现
         """
-        print("[架构师-基因] 正在调用 LLM (占位符) 生成初始基因池...")
-
-        # 1) 先尝试从 LLM 拿结果（可能是 list[dict]，也可能异常/无效）
-        try:
-            standard_schema = self.translator.get_standard_schema()
-        except Exception as e:
-            standard_schema = {}
-            print(f"[架构师-基因][警告] 获取标准模式失败: {e}")
-
-        genes_json = None
-        try:
-            genes_json = llm_generate_genes(standard_schema, self.target_variable)
-        except Exception as e:
-            print(f"[架构师-基因][警告] LLM 生成基因异常: {e}")
-
-        # 2) 尝试把 LLM 结果转成合法的 FeatureGene 列表
+        print("[架构师-基因] V1.2 混合策略基因生成启动...")
         gene_pool: List[ModelingGene] = []
-        def _safe_add_feature(op: str, path: str, window=None):
-            if not isinstance(op, str) or not isinstance(path, str):
-                return
-            if '.' not in path:
-                return
-            if op not in ['AVG', 'COUNT', 'SUM', 'LATEST', 'MAX', 'MIN']:
-                return
-            gene_pool.append(FeatureGene(op=op, path=path, window=window))
+        
+        standard_schema = self.translator.get_standard_schema()
+        num_tables = len(standard_schema)
 
-        if isinstance(genes_json, list):
-            for g in genes_json:
-                try:
-                    op = g.get('op')
-                    path = g.get('path')
-                    # 跳过无效记录
-                    if not op or not path or '.' not in path:
-                        continue
-                    # 过滤掉命中 EXCLUDED_COLUMNS 的字段
-                    try:
-                        _, field = path.split('.', 1)
-                    except Exception:
-                        continue
-                    if field in EXCLUDED_COLUMNS:
-                        print(f"[基因过滤] 跳过被禁用字段: {path}")
-                        continue
-                    if op in ['AVG', 'COUNT', 'SUM', 'LATEST', 'MAX', 'MIN']:
-                        gene_pool.append(FeatureGene(
-                            op=op,
-                            path=path,
-                            window=g.get('window')
-                        ))
-                except Exception:
-                    continue
+        if num_tables <= 1:
+            # --- 单表场景：纯机器筛选 ---
+            print("[架构师-基因] 检测到单表场景，使用纯机器筛选策略。")
+            gene_pool.extend(self._machine_screen_features(self.primary_entity_name, top_k=30))
+        
         else:
-            # 有些实现会在 llm_interface 里直接记录“无效 JSON”但仍返回部分结构；此处忽略，走兜底
-            print("[架构师-基因][提示] LLM 未返回可用的特征列表，准备进入兜底。")
+            # --- 多表场景：混合策略 ---
+            print("[架构师-基因] 检测到多表场景，使用混合策略。")
+            # 1. 主表使用机器筛选
+            gene_pool.extend(self._machine_screen_features(self.primary_entity_name, top_k=15))
 
-        # 3) 如果 LLM 没产出任何有效 FeatureGene，则从目标实体自动造一批 LATEST 特征
-        if len([g for g in gene_pool if isinstance(g, FeatureGene)]) == 0:
+            # 2. 副表交给LLM创造跨表特征
+            secondary_schema = {k: v for k, v in standard_schema.items() if k != self.primary_entity_name}
+            
+            # 简化假设主键名为'user_id'或类似，实际应从schema中动态获取
+            primary_key = next((c for c in standard_schema.get(self.primary_entity_name, []) if 'id' in c.lower()), "id")
+
+            print(f"[架构师-基因] (LLM任务) 将 {len(secondary_schema)} 个副表信息交给LLM创造跨表特征。")
             try:
-                # 从 "BankRecord" 或 target_variable 指定的实体 选列
-                tgt_entity = None
-                tgt_field = None
-                if isinstance(self.target_variable, str) and '.' in self.target_variable:
-                    tgt_entity, tgt_field = self.target_variable.split('.', 1)
-                else:
-                    # 缺省走 BankRecord.y
-                    tgt_entity, tgt_field = 'BankRecord', 'y'
-
-                df_ent = self.translator.get_entity_dataframe(tgt_entity)
-                if getattr(df_ent, "empty", True):
-                    # 如果目标实体取不到，再从已知的单表里取
-                    if hasattr(self.translator, "db_tables") and isinstance(self.translator.db_tables, dict) and len(self.translator.db_tables) == 1:
-                        df_ent = list(self.translator.db_tables.values())[0]
-                        # 尝试从 schema 找实体名；不行就继续用 BankRecord
-                        tgt_entity = tgt_entity or 'BankRecord'
-
-                if df_ent is not None and not getattr(df_ent, "empty", True):
-                    # 选前若干列作为 LATEST 特征（排除目标列）
-                    cols = [c for c in df_ent.columns if c != tgt_field]
-                    # 适当限制数量，避免过多：这里取前 8 列
-                    for c in cols[:8]:
-                        _safe_add_feature("LATEST", f"{tgt_entity}.{c}", None)
-                    print(f"[架构师-基因][兜底] 从实体 {tgt_entity} 自动构造 LATEST 特征 {min(8, len(cols))} 个。")
-                else:
-                    print("[架构师-基因][兜底-警告] 无法获取任何实体数据，后续将仅追加模型基因。")
+                # 注意：这里我们调用一个新的LLM接口函数
+                genes_json = llm_generate_cross_table_genes(
+                    secondary_schema=secondary_schema,
+                    primary_entity_name=self.primary_entity_name,
+                    primary_key_name=primary_key,
+                    target_variable=self.target_variable
+                )
+                
+                # Process LLM results
+                if isinstance(genes_json, list):
+                    for g in genes_json:
+                        op = g.get('op')
+                        path = g.get('path')
+                        if not op or not path or '.' not in path: continue
+                        if op in ['AVG', 'COUNT', 'SUM', 'MAX', 'MIN']:
+                            gene_pool.append(FeatureGene(op=op, path=path, window=g.get('window')))
+            except NameError:
+                print("[架构师-基因][警告] 函数 `llm_generate_cross_table_genes` 未定义，跳过LLM跨表基因生成。")
             except Exception as e:
-                print(f"[架构师-基因][兜底-异常] 自动构造 LATEST 特征失败: {e}")
+                print(f"[架构师-基因][警告] LLM 生成跨表基因异常: {e}")
 
-        # 4) 无论如何，确保有多个模型基因
+        # 如果没有任何特征基因，则执行最简单的兜底
+        if not any(isinstance(g, FeatureGene) for g in gene_pool):
+            print("[架构师-基因][兜底] 未能生成任何特征，将使用主表前5列作为兜底。")
+            cols = standard_schema.get(self.primary_entity_name, [])[:5]
+            for col in cols:
+                if col != self.target_field:
+                    gene_pool.append(FeatureGene(op='LATEST', path=f"{self.primary_entity_name}.{col}"))
+
+        # 无论如何，都添加模型基因
         model_configs = [
+            {"alg": "LGBMClassifier", "params": {"n_estimators": 100, "learning_rate": 0.1, "num_leaves": 31, "random_state": 42, "verbose": -1}},
             {"alg": "LogisticRegression", "params": {"solver": "liblinear", "class_weight": "balanced", "random_state": 42}},
-            {"alg": "RandomForestClassifier", "params": {"n_estimators": 100, "max_depth": 10, "random_state": 42}},
-            {"alg": "LGBMClassifier", "params": {"n_estimators": 100, "learning_rate": 0.1, "num_leaves": 31, "random_state": 42, "verbose": -1}}
         ]
         for config in model_configs:
             gene_pool.append(ModelGene(alg=config["alg"], params=config["params"]))
 
-        # 5) 去重（以 path/op/window 为键），防止重复
+        # 去重
         seen = set()
         deduped: List[ModelingGene] = []
         for g in gene_pool:
-            if isinstance(g, FeatureGene):
-                key = ("F", g.op, g.path, g.window)
-            elif isinstance(g, ModelGene):
-                key = ("M", g.alg, tuple(sorted(g.params.items())) if isinstance(g.params, dict) else None)
-            else:
-                key = ("O", repr(g))
-            if key in seen:
-                continue
+            key = ("F", g.op, g.path, g.window) if isinstance(g, FeatureGene) else ("M", g.alg, tuple(sorted(g.params.items())) if isinstance(g, ModelGene) and g.params else g.alg)
+            if key in seen: continue
             seen.add(key)
             deduped.append(g)
 
@@ -274,8 +279,10 @@ class FeatureEngine:
         # 4) 清理 & 判空
         X = X.dropna(axis=1, how='all')
         if X is None or X.shape[1] == 0:
-            # 还是没产出特征 → 兜底到“单表全列”
-            return self._build_baseline_X(base_df, self.target_field)
+            # V1.3 修正: 如果染色体有基因，但无法生成任何有效特征，则不再回退到基线模型。
+            # 而是返回空特征矩阵，让评估器给它一个低分，从而在演化中被淘汰。
+            print("[特征引擎-警告] 染色体中的所有特征基因都无效或被跳过，返回空特征矩阵。")
+            return pd.DataFrame(index=base_df.index), y, [], []
 
         # 5) 列类型拆分
         numeric_features = X.select_dtypes(include=[np.number]).columns.tolist()
@@ -469,23 +476,47 @@ class EvolutionaryEngine:
         self.model_genes = [g for g in gene_pool if isinstance(g, ModelGene)]
         # (未来可添加 Transform/Filter 基因)
 
-    def initialize_population(self, size: int) -> List[ModelingChromosome]:
-        """V1.1 智能初始化 (动态特征数量)：确保染色体可被评估"""
+    def initialize_population(self, size: int, config: Dict[str, Any]) -> List[ModelingChromosome]:
+        """V1.3 智能初始化 (动态特征数量)，使用外部配置"""
         population = []
         if not self.feature_genes or not self.model_genes:
             raise ValueError("基因池中缺少必要的 FeatureGene 或 ModelGene！")
 
         total_features = len(self.feature_genes)
+        
+        # 从配置中读取参数，如果配置不存在则使用默认值
+        min_ratio = config.get("min_features_ratio", 0.15)
+        max_ratio = config.get("max_features_ratio", 0.40)
+        max_floor = config.get("max_features_floor", 8)
+
         # 根据基因池大小，动态决定初始特征数量的范围
-        min_count = max(1, int(total_features * 0.15))
-        max_count = min(total_features, max(min_count, int(total_features * 0.4)))
+        min_count = max(1, int(total_features * min_ratio))
+        
+        # 原始计算（基于百分比）
+        percentage_based_max = min(total_features, max(min_count, int(total_features * max_ratio)))
+        
+        # 新的 max_count：取“按百分比算”和“保底下限”中的较大者，但不能超过总数
+        max_count = min(total_features, max(percentage_based_max, max_floor))
+
+        # 确保 min_count 不会大于 max_count
+        if min_count > max_count:
+            min_count = max_count
+
         print(f"[演化引擎] 动态初始化特征数范围: [{min_count}, {max_count}] (总特征池: {total_features})")
 
         for _ in range(size):
             genes = []
-            # 从动态范围中随机选择特征数量
-            num_features = random.randint(min_count, max_count)
-            genes.extend(random.sample(self.feature_genes, num_features))
+            # 如果特征池为空，则不添加任何特征基因
+            if total_features > 0:
+                # 确保 num_features 不会因为 min_count > max_count 而出错
+                if min_count >= max_count:
+                    num_features = min_count
+                else:
+                    num_features = random.randint(min_count, max_count)
+                
+                if num_features > 0:
+                    genes.extend(random.sample(self.feature_genes, num_features))
+
             genes.append(random.choice(self.model_genes))
             population.append(ModelingChromosome(genes=genes))
         return population
@@ -501,20 +532,23 @@ class EvolutionaryEngine:
         return selected
 
     def crossover(self, parent1: ModelingChromosome, parent2: ModelingChromosome) -> ModelingChromosome:
-        """V1.0 单点交叉（简化版）"""
+        """V1.0 单点交叉（简化版），V1.3增加去重逻辑"""
         # (简化：只交换 FeatureGene，保持 ModelGene 不变)
         p1_features = [g for g in parent1.genes if isinstance(g, FeatureGene)]
         p2_features = [g for g in parent2.genes if isinstance(g, FeatureGene)]
-        model_gene = next(g for g in parent1.genes if isinstance(g, ModelGene)) # 继承父1的模型
+        model_gene = next((g for g in parent1.genes if isinstance(g, ModelGene)), random.choice(self.model_genes)) # 继承父1的模型,增加兜底
         
         # 确保有足够的特征进行交叉
         if len(p1_features) <= 1 or len(p2_features) <= 1:
             # 如果特征太少，直接组合所有特征
-            child_features = p1_features + p2_features
+            combined_features = p1_features + p2_features
         else:
             cut = random.randint(1, min(len(p1_features), len(p2_features)) - 1)
-            child_features = p1_features[:cut] + p2_features[cut:]
+            combined_features = p1_features[:cut] + p2_features[cut:]
         
+        # V1.3 新增：对合并后的特征进行去重 (利用dict.fromkeys保证顺序)
+        child_features = list(dict.fromkeys(combined_features))
+
         return ModelingChromosome(genes=child_features + [model_gene])
 
     def mutate(self, chromosome: ModelingChromosome) -> ModelingChromosome:

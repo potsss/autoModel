@@ -1,0 +1,585 @@
+{
+  "relationships": [
+    {
+      "name": "application_to_bureau",
+      "from_table": "bureau",
+      "from_field": "SK_ID_CURR",
+      "from_entity": "bureau",
+      "to_table": "application_train",
+      "to_field": "SK_ID_CURR",
+      "to_entity": "application_train",
+      "type": "many_to_one",
+      "from_key": "SK_ID_CURR",
+      "to_key": "SK_ID_CURR",
+      "cardinality": "0..*",
+      "description": "一个客户可以有0到多条征信局信贷记录",
+      "business_meaning": "通过客户ID关联,了解客户在其他金融机构的信用历史",
+      "aggregation_examples": [
+        "COUNT: 统计客户的历史信贷数量",
+        "SUM(AMT_CREDIT_SUM_DEBT): 计算客户在其他机构的总欠款",
+        "MAX(CREDIT_DAY_OVERDUE): 查找客户历史最严重的逾期天数",
+        "AVG(AMT_CREDIT_MAX_OVERDUE): 计算平均历史逾期金额"
+      ]
+    },
+    {
+      "name": "application_to_installments",
+      "from_table": "installments_payments",
+      "from_field": "SK_ID_CURR",
+      "from_entity": "installments_payments",
+      "to_table": "application_train",
+      "to_field": "SK_ID_CURR",
+      "to_entity": "application_train",
+      "type": "many_to_one",
+      "from_key": "SK_ID_CURR",
+      "to_key": "SK_ID_CURR",
+      "cardinality": "0..*",
+      "description": "一个客户(申请)对应多期分期还款记录",
+      "business_meaning": "用于构建分期表现相关的跨表聚合特征，如逾期、还款金额等",
+      "aggregation_examples": [
+        "COUNT: 统计分期还款期数",
+        "SUM(AMT_PAYMENT): 累计实际还款金额",
+        "AVG(DAYS_ENTRY_PAYMENT - DAYS_INSTALMENT): 平均提前/延迟天数",
+        "MAX(NUM_INSTALMENT_NUMBER): 最大期次"
+      ]
+    },
+    {
+      "name": "application_to_previous",
+      "from_table": "previous_application",
+      "from_field": "SK_ID_CURR",
+      "from_entity": "previous_application",
+      "to_table": "application_train",
+      "to_field": "SK_ID_CURR",
+      "to_entity": "application_train",
+      "type": "many_to_one",
+      "from_key": "SK_ID_CURR",
+      "to_key": "SK_ID_CURR",
+      "cardinality": "0..*",
+      "description": "一个客户可以有0到多次在Home Credit的历史申请",
+      "business_meaning": "通过客户ID关联,了解客户在本公司的申请历史行为特征",
+      "aggregation_examples": [
+        "COUNT: 统计客户历史申请总次数",
+        "COUNT WHERE NAME_CONTRACT_STATUS='Refused': 统计被拒次数",
+        "COUNT WHERE NAME_CONTRACT_STATUS='Approved': 统计批准次数",
+        "SUM(AMT_CREDIT): 计算客户历史累计借款总额",
+        "AVG(AMT_APPLICATION - AMT_CREDIT): 计算平均申请与批准金额差异",
+        "MAX(DAYS_DECISION): 最长决策时间",
+        "COUNT(DISTINCT CODE_REJECT_REASON): 被拒原因种类数"
+      ]
+    }
+  ],
+  "business_rules": [
+    {
+      "name": "debt_to_income_ratio",
+      "formula": "AMT_CREDIT / AMT_INCOME_TOTAL",
+      "description": "负债收入比",
+      "tables": [
+        "application_train"
+      ],
+      "threshold": {
+        "warning": 0.5,
+        "danger": 0.8
+      },
+      "business_meaning": "比值越高,还款压力越大,违约风险越高"
+    },
+    {
+      "name": "previous_refused_count",
+      "formula": "COUNT(previous_application WHERE NAME_CONTRACT_STATUS='Refused')",
+      "description": "历史被拒次数",
+      "tables": [
+        "previous_application"
+      ],
+      "aggregation": "COUNT",
+      "business_meaning": "被拒次数多的客户风险可能更高",
+      "high_value": true
+    },
+    {
+      "name": "previous_approval_rate",
+      "formula": "COUNT(WHERE STATUS='Approved') / COUNT(*)",
+      "description": "历史申请批准率",
+      "tables": [
+        "previous_application"
+      ],
+      "aggregation": "RATE",
+      "business_meaning": "批准率低可能表示信用评级不高",
+      "high_value": true
+    },
+    {
+      "name": "credit_approval_ratio",
+      "formula": "AVG(AMT_CREDIT / AMT_APPLICATION)",
+      "description": "历史申请平均批准比例",
+      "tables": [
+        "previous_application"
+      ],
+      "aggregation": "AVG",
+      "business_meaning": "比例低可能表示信用评级不高或申请金额不合理",
+      "high_value": true
+    }
+  ],
+  "feature_engineering_hints": [
+    {
+      "category": "previous_application_aggregation",
+      "priority": "HIGH",
+      "examples": [
+        {
+          "name": "prev_refused_count",
+          "formula": "COUNT(previous_application WHERE NAME_CONTRACT_STATUS='Refused')",
+          "description": "历史被拒次数 - 强特征"
+        },
+        {
+          "name": "prev_approved_count",
+          "formula": "COUNT(previous_application WHERE NAME_CONTRACT_STATUS='Approved')",
+          "description": "历史批准次数"
+        },
+        {
+          "name": "prev_approval_rate",
+          "formula": "COUNT(WHERE STATUS='Approved') / COUNT(*)",
+          "description": "批准率 - 强特征"
+        },
+        {
+          "name": "prev_avg_credit_amount",
+          "formula": "AVG(previous_application.AMT_CREDIT)",
+          "description": "平均批准金额"
+        },
+        {
+          "name": "prev_credit_to_application_ratio",
+          "formula": "AVG(AMT_CREDIT / AMT_APPLICATION)",
+          "description": "平均批准/申请比例 - 强特征"
+        },
+        {
+          "name": "prev_max_days_decision",
+          "formula": "MAX(previous_application.DAYS_DECISION)",
+          "description": "最长决策时间"
+        }
+      ]
+    },
+    {
+      "category": "bureau_aggregation",
+      "priority": "MEDIUM",
+      "examples": [
+        {
+          "name": "bureau_active_debt_sum",
+          "formula": "SUM(bureau.AMT_CREDIT_SUM_DEBT WHERE CREDIT_ACTIVE='Active')",
+          "description": "活跃信贷的总欠款"
+        },
+        {
+          "name": "bureau_overdue_count",
+          "formula": "COUNT(bureau WHERE CREDIT_DAY_OVERDUE > 0)",
+          "description": "有逾期记录的信贷数量"
+        },
+        {
+          "name": "bureau_max_overdue_amount",
+          "formula": "MAX(bureau.AMT_CREDIT_MAX_OVERDUE)",
+          "description": "历史最大逾期金额"
+        }
+      ]
+    },
+    {
+      "category": "installments_aggregation",
+      "priority": "LOW",
+      "examples": [
+        {
+          "name": "installments_count",
+          "formula": "COUNT(installments_payments)",
+          "description": "分期还款期数"
+        },
+        {
+          "name": "installments_total_payment",
+          "formula": "SUM(installments_payments.AMT_PAYMENT)",
+          "description": "累计实际还款金额"
+        }
+      ]
+    }
+  ],
+  "tables": {
+    "application_train": {
+      "description": "主申请表 - 每行代表一个贷款申请",
+      "primary_key": "SK_ID_CURR",
+      "fields": {
+        "SK_ID_CURR": {
+          "type": "int64",
+          "description": "申请ID(主键)",
+          "nullable": false
+        },
+        "TARGET": {
+          "type": "int64",
+          "description": "目标变量: 1=违约, 0=正常",
+          "nullable": false
+        }
+      }
+    },
+    "bureau": {
+      "description": "征信局历史信贷记录 (已聚合 bureau_balance 特征)",
+      "primary_key": "SK_ID_BUREAU",
+      "foreign_keys": [
+        "SK_ID_CURR"
+      ],
+      "fields": {
+        "SK_ID_CURR": {
+          "type": "int64",
+          "description": "关联主表的客户ID",
+          "nullable": false
+        },
+        "SK_ID_BUREAU": {
+          "type": "int64",
+          "description": "征信记录ID(主键)",
+          "nullable": false
+        },
+        "BB_MONTHS_COUNT": {
+          "type": "int64",
+          "description": "bureau_balance 总月数",
+          "nullable": true,
+          "high_value": true
+        },
+        "BB_MONTHS_MIN": {
+          "type": "int64",
+          "description": "最早月份",
+          "nullable": true
+        },
+        "BB_MONTHS_MAX": {
+          "type": "int64",
+          "description": "最近月份",
+          "nullable": true
+        },
+        "STATUS_0": {
+          "type": "int64",
+          "description": "正常状态月数 (无逾期)",
+          "nullable": true,
+          "high_value": true
+        },
+        "STATUS_1": {
+          "type": "int64",
+          "description": "DPD 1-30天月数",
+          "nullable": true,
+          "high_value": true
+        },
+        "STATUS_2": {
+          "type": "int64",
+          "description": "DPD 31-60天月数",
+          "nullable": true,
+          "high_value": true
+        },
+        "STATUS_3": {
+          "type": "int64",
+          "description": "DPD 61-90天月数",
+          "nullable": true,
+          "high_value": true
+        },
+        "STATUS_4": {
+          "type": "int64",
+          "description": "DPD 91-120天月数",
+          "nullable": true,
+          "high_value": true
+        },
+        "STATUS_5": {
+          "type": "int64",
+          "description": "DPD 120+天月数 (严重逾期)",
+          "nullable": true,
+          "high_value": true
+        },
+        "STATUS_C": {
+          "type": "int64",
+          "description": "已结清状态月数",
+          "nullable": true
+        },
+        "STATUS_X": {
+          "type": "int64",
+          "description": "未知状态月数",
+          "nullable": true
+        },
+        "BB_DPD_ANY_COUNT": {
+          "type": "int64",
+          "description": "任意逾期月数 (STATUS_1-5之和)",
+          "nullable": true,
+          "high_value": true
+        },
+        "BB_DPD_SERIOUS_COUNT": {
+          "type": "int64",
+          "description": "严重逾期月数 (60天+, STATUS_3-5之和)",
+          "nullable": true,
+          "high_value": true
+        },
+        "BB_DPD_RATIO": {
+          "type": "float64",
+          "description": "逾期月占比 (DPD_ANY/MONTHS_COUNT)",
+          "nullable": true,
+          "high_value": true
+        }
+      }
+    },
+    "installments_payments": {
+      "description": "历史分期还款记录",
+      "foreign_keys": [
+        "SK_ID_CURR",
+        "SK_ID_PREV"
+      ],
+      "fields": {
+        "SK_ID_CURR": {
+          "type": "int64",
+          "description": "关联主表的客户ID",
+          "nullable": false
+        },
+        "SK_ID_PREV": {
+          "type": "int64",
+          "description": "关联历史申请ID",
+          "nullable": false
+        }
+      }
+    },
+    "previous_application": {
+      "description": "客户在Home Credit的历史申请记录 (已聚合 POS_CASH_balance + credit_card_balance 特征)",
+      "primary_key": "SK_ID_PREV",
+      "foreign_keys": [
+        "SK_ID_CURR"
+      ],
+      "fields": {
+        "SK_ID_CURR": {
+          "type": "int64",
+          "description": "关联主表的客户ID",
+          "nullable": false
+        },
+        "SK_ID_PREV": {
+          "type": "int64",
+          "description": "历史申请ID(主键)",
+          "nullable": false
+        },
+        "NAME_CONTRACT_STATUS": {
+          "type": "object",
+          "description": "申请状态: Approved/Refused/Canceled/Unused offer",
+          "nullable": false,
+          "high_value": true
+        },
+        "AMT_APPLICATION": {
+          "type": "float64",
+          "description": "申请金额",
+          "nullable": true
+        },
+        "AMT_CREDIT": {
+          "type": "float64",
+          "description": "批准金额",
+          "nullable": true
+        },
+        "CODE_REJECT_REASON": {
+          "type": "object",
+          "description": "被拒原因",
+          "nullable": true,
+          "high_value": true
+        },
+        "DAYS_DECISION": {
+          "type": "float64",
+          "description": "决策时间距申请日的天数",
+          "nullable": true,
+          "time_relative": true
+        },
+        "CNT_PAYMENT": {
+          "type": "float64",
+          "description": "分期数",
+          "nullable": true
+        },
+        "POS_MONTHS_COUNT": {
+          "type": "int64",
+          "description": "POS/CASH 合同总月数",
+          "nullable": true,
+          "high_value": true
+        },
+        "POS_MONTHS_MIN": {
+          "type": "int64",
+          "description": "POS 最早月份",
+          "nullable": true
+        },
+        "POS_MONTHS_MAX": {
+          "type": "int64",
+          "description": "POS 最近月份",
+          "nullable": true
+        },
+        "POS_DPD_MAX": {
+          "type": "float64",
+          "description": "POS 最大逾期天数",
+          "nullable": true,
+          "high_value": true
+        },
+        "POS_DPD_MEAN": {
+          "type": "float64",
+          "description": "POS 平均逾期天数",
+          "nullable": true,
+          "high_value": true
+        },
+        "POS_DPD_SUM": {
+          "type": "float64",
+          "description": "POS 累计逾期天数",
+          "nullable": true,
+          "high_value": true
+        },
+        "POS_DPD_DEF_MAX": {
+          "type": "float64",
+          "description": "POS 最大逾期定义天数",
+          "nullable": true
+        },
+        "POS_DPD_DEF_MEAN": {
+          "type": "float64",
+          "description": "POS 平均逾期定义天数",
+          "nullable": true
+        },
+        "POS_STATUS_Active": {
+          "type": "int64",
+          "description": "POS 活跃状态月数",
+          "nullable": true
+        },
+        "POS_STATUS_Completed": {
+          "type": "int64",
+          "description": "POS 已完成状态月数",
+          "nullable": true
+        },
+        "POS_INSTALMENT_MEAN": {
+          "type": "float64",
+          "description": "POS 平均分期数",
+          "nullable": true
+        },
+        "POS_INSTALMENT_MAX": {
+          "type": "float64",
+          "description": "POS 最大分期数",
+          "nullable": true
+        },
+        "POS_FUTURE_MEAN": {
+          "type": "float64",
+          "description": "POS 平均剩余期数",
+          "nullable": true
+        },
+        "POS_FUTURE_MIN": {
+          "type": "float64",
+          "description": "POS 最小剩余期数",
+          "nullable": true
+        },
+        "POS_DPD_POSITIVE_COUNT": {
+          "type": "int64",
+          "description": "POS 有逾期的月数",
+          "nullable": true,
+          "high_value": true
+        },
+        "CC_MONTHS_COUNT": {
+          "type": "int64",
+          "description": "信用卡总月数",
+          "nullable": true,
+          "high_value": true
+        },
+        "CC_MONTHS_MIN": {
+          "type": "int64",
+          "description": "信用卡最早月份",
+          "nullable": true
+        },
+        "CC_MONTHS_MAX": {
+          "type": "int64",
+          "description": "信用卡最近月份",
+          "nullable": true
+        },
+        "CC_BALANCE_MEAN": {
+          "type": "float64",
+          "description": "信用卡平均余额",
+          "nullable": true,
+          "high_value": true
+        },
+        "CC_BALANCE_MAX": {
+          "type": "float64",
+          "description": "信用卡最大余额",
+          "nullable": true
+        },
+        "CC_BALANCE_MIN": {
+          "type": "float64",
+          "description": "信用卡最小余额",
+          "nullable": true
+        },
+        "CC_BALANCE_STD": {
+          "type": "float64",
+          "description": "信用卡余额波动性 (标准差)",
+          "nullable": true,
+          "high_value": true
+        },
+        "CC_LIMIT_MEAN": {
+          "type": "float64",
+          "description": "信用卡平均额度",
+          "nullable": true
+        },
+        "CC_LIMIT_MAX": {
+          "type": "float64",
+          "description": "信用卡最大额度",
+          "nullable": true
+        },
+        "CC_ATM_DRAWINGS_SUM": {
+          "type": "float64",
+          "description": "ATM取现累计金额",
+          "nullable": true,
+          "high_value": true
+        },
+        "CC_ATM_DRAWINGS_MEAN": {
+          "type": "float64",
+          "description": "ATM取现平均金额",
+          "nullable": true
+        },
+        "CC_DRAWINGS_SUM": {
+          "type": "float64",
+          "description": "总取现累计金额",
+          "nullable": true
+        },
+        "CC_DRAWINGS_MEAN": {
+          "type": "float64",
+          "description": "总取现平均金额",
+          "nullable": true
+        },
+        "CC_PAYMENT_SUM": {
+          "type": "float64",
+          "description": "累计还款金额",
+          "nullable": true,
+          "high_value": true
+        },
+        "CC_PAYMENT_MEAN": {
+          "type": "float64",
+          "description": "平均还款金额",
+          "nullable": true
+        },
+        "CC_PAYMENT_MIN": {
+          "type": "float64",
+          "description": "最小还款金额",
+          "nullable": true
+        },
+        "CC_MIN_PAYMENT_MEAN": {
+          "type": "float64",
+          "description": "平均最低还款要求",
+          "nullable": true
+        },
+        "CC_DPD_MAX": {
+          "type": "float64",
+          "description": "信用卡最大逾期天数",
+          "nullable": true,
+          "high_value": true
+        },
+        "CC_DPD_MEAN": {
+          "type": "float64",
+          "description": "信用卡平均逾期天数",
+          "nullable": true,
+          "high_value": true
+        },
+        "CC_DPD_DEF_MAX": {
+          "type": "float64",
+          "description": "信用卡最大逾期定义天数",
+          "nullable": true
+        },
+        "CC_DPD_DEF_MEAN": {
+          "type": "float64",
+          "description": "信用卡平均逾期定义天数",
+          "nullable": true
+        },
+        "CC_UTILIZATION_MEAN": {
+          "type": "float64",
+          "description": "信用额度使用率 (余额/额度)",
+          "nullable": true,
+          "high_value": true
+        },
+        "CC_MIN_PAYMENT_MISS_COUNT": {
+          "type": "int64",
+          "description": "未足额还款次数",
+          "nullable": true,
+          "high_value": true
+        }
+      }
+    }
+  }
+}

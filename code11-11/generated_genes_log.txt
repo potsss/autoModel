@@ -1,0 +1,239 @@
+--- Generated Feature Genes ---
+Total Feature Genes: 233
+
+Main Table Genes (120):
+  - LATEST: application_train.NAME_CONTRACT_TYPE
+  - LATEST: application_train.CODE_GENDER
+  - LATEST: application_train.FLAG_OWN_CAR
+  - LATEST: application_train.FLAG_OWN_REALTY
+  - LATEST: application_train.CNT_CHILDREN
+  - LATEST: application_train.AMT_INCOME_TOTAL
+  - LATEST: application_train.AMT_CREDIT
+  - LATEST: application_train.AMT_ANNUITY
+  - LATEST: application_train.AMT_GOODS_PRICE
+  - LATEST: application_train.NAME_TYPE_SUITE
+  - LATEST: application_train.NAME_INCOME_TYPE
+  - LATEST: application_train.NAME_EDUCATION_TYPE
+  - LATEST: application_train.NAME_FAMILY_STATUS
+  - LATEST: application_train.NAME_HOUSING_TYPE
+  - LATEST: application_train.REGION_POPULATION_RELATIVE
+  - LATEST: application_train.DAYS_BIRTH
+  - LATEST: application_train.DAYS_EMPLOYED
+  - LATEST: application_train.DAYS_REGISTRATION
+  - LATEST: application_train.DAYS_ID_PUBLISH
+  - LATEST: application_train.OWN_CAR_AGE
+  - LATEST: application_train.FLAG_MOBIL
+  - LATEST: application_train.FLAG_EMP_PHONE
+  - LATEST: application_train.FLAG_WORK_PHONE
+  - LATEST: application_train.FLAG_CONT_MOBILE
+  - LATEST: application_train.FLAG_PHONE
+  - LATEST: application_train.FLAG_EMAIL
+  - LATEST: application_train.OCCUPATION_TYPE
+  - LATEST: application_train.CNT_FAM_MEMBERS
+  - LATEST: application_train.REGION_RATING_CLIENT
+  - LATEST: application_train.REGION_RATING_CLIENT_W_CITY
+  - LATEST: application_train.WEEKDAY_APPR_PROCESS_START
+  - LATEST: application_train.HOUR_APPR_PROCESS_START
+  - LATEST: application_train.REG_REGION_NOT_LIVE_REGION
+  - LATEST: application_train.REG_REGION_NOT_WORK_REGION
+  - LATEST: application_train.LIVE_REGION_NOT_WORK_REGION
+  - LATEST: application_train.REG_CITY_NOT_LIVE_CITY
+  - LATEST: application_train.REG_CITY_NOT_WORK_CITY
+  - LATEST: application_train.LIVE_CITY_NOT_WORK_CITY
+  - LATEST: application_train.ORGANIZATION_TYPE
+  - LATEST: application_train.EXT_SOURCE_1
+  - LATEST: application_train.EXT_SOURCE_2
+  - LATEST: application_train.EXT_SOURCE_3
+  - LATEST: application_train.APARTMENTS_AVG
+  - LATEST: application_train.BASEMENTAREA_AVG
+  - LATEST: application_train.YEARS_BEGINEXPLUATATION_AVG
+  - LATEST: application_train.YEARS_BUILD_AVG
+  - LATEST: application_train.COMMONAREA_AVG
+  - LATEST: application_train.ELEVATORS_AVG
+  - LATEST: application_train.ENTRANCES_AVG
+  - LATEST: application_train.FLOORSMAX_AVG
+  - LATEST: application_train.FLOORSMIN_AVG
+  - LATEST: application_train.LANDAREA_AVG
+  - LATEST: application_train.LIVINGAPARTMENTS_AVG
+  - LATEST: application_train.LIVINGAREA_AVG
+  - LATEST: application_train.NONLIVINGAPARTMENTS_AVG
+  - LATEST: application_train.NONLIVINGAREA_AVG
+  - LATEST: application_train.APARTMENTS_MODE
+  - LATEST: application_train.BASEMENTAREA_MODE
+  - LATEST: application_train.YEARS_BEGINEXPLUATATION_MODE
+  - LATEST: application_train.YEARS_BUILD_MODE
+  - LATEST: application_train.COMMONAREA_MODE
+  - LATEST: application_train.ELEVATORS_MODE
+  - LATEST: application_train.ENTRANCES_MODE
+  - LATEST: application_train.FLOORSMAX_MODE
+  - LATEST: application_train.FLOORSMIN_MODE
+  - LATEST: application_train.LANDAREA_MODE
+  - LATEST: application_train.LIVINGAPARTMENTS_MODE
+  - LATEST: application_train.LIVINGAREA_MODE
+  - LATEST: application_train.NONLIVINGAPARTMENTS_MODE
+  - LATEST: application_train.NONLIVINGAREA_MODE
+  - LATEST: application_train.APARTMENTS_MEDI
+  - LATEST: application_train.BASEMENTAREA_MEDI
+  - LATEST: application_train.YEARS_BEGINEXPLUATATION_MEDI
+  - LATEST: application_train.YEARS_BUILD_MEDI
+  - LATEST: application_train.COMMONAREA_MEDI
+  - LATEST: application_train.ELEVATORS_MEDI
+  - LATEST: application_train.ENTRANCES_MEDI
+  - LATEST: application_train.FLOORSMAX_MEDI
+  - LATEST: application_train.FLOORSMIN_MEDI
+  - LATEST: application_train.LANDAREA_MEDI
+  - LATEST: application_train.LIVINGAPARTMENTS_MEDI
+  - LATEST: application_train.LIVINGAREA_MEDI
+  - LATEST: application_train.NONLIVINGAPARTMENTS_MEDI
+  - LATEST: application_train.NONLIVINGAREA_MEDI
+  - LATEST: application_train.FONDKAPREMONT_MODE
+  - LATEST: application_train.HOUSETYPE_MODE
+  - LATEST: application_train.TOTALAREA_MODE
+  - LATEST: application_train.WALLSMATERIAL_MODE
+  - LATEST: application_train.EMERGENCYSTATE_MODE
+  - LATEST: application_train.OBS_30_CNT_SOCIAL_CIRCLE
+  - LATEST: application_train.DEF_30_CNT_SOCIAL_CIRCLE
+  - LATEST: application_train.OBS_60_CNT_SOCIAL_CIRCLE
+  - LATEST: application_train.DEF_60_CNT_SOCIAL_CIRCLE
+  - LATEST: application_train.DAYS_LAST_PHONE_CHANGE
+  - LATEST: application_train.FLAG_DOCUMENT_2
+  - LATEST: application_train.FLAG_DOCUMENT_3
+  - LATEST: application_train.FLAG_DOCUMENT_4
+  - LATEST: application_train.FLAG_DOCUMENT_5
+  - LATEST: application_train.FLAG_DOCUMENT_6
+  - LATEST: application_train.FLAG_DOCUMENT_7
+  - LATEST: application_train.FLAG_DOCUMENT_8
+  - LATEST: application_train.FLAG_DOCUMENT_9
+  - LATEST: application_train.FLAG_DOCUMENT_10
+  - LATEST: application_train.FLAG_DOCUMENT_11
+  - LATEST: application_train.FLAG_DOCUMENT_12
+  - LATEST: application_train.FLAG_DOCUMENT_13
+  - LATEST: application_train.FLAG_DOCUMENT_14
+  - LATEST: application_train.FLAG_DOCUMENT_15
+  - LATEST: application_train.FLAG_DOCUMENT_16
+  - LATEST: application_train.FLAG_DOCUMENT_17
+  - LATEST: application_train.FLAG_DOCUMENT_18
+  - LATEST: application_train.FLAG_DOCUMENT_19
+  - LATEST: application_train.FLAG_DOCUMENT_20
+  - LATEST: application_train.FLAG_DOCUMENT_21
+  - LATEST: application_train.AMT_REQ_CREDIT_BUREAU_HOUR
+  - LATEST: application_train.AMT_REQ_CREDIT_BUREAU_DAY
+  - LATEST: application_train.AMT_REQ_CREDIT_BUREAU_WEEK
+  - LATEST: application_train.AMT_REQ_CREDIT_BUREAU_MON
+  - LATEST: application_train.AMT_REQ_CREDIT_BUREAU_QRT
+  - LATEST: application_train.AMT_REQ_CREDIT_BUREAU_YEAR
+
+Cross-Table Genes (113):
+  - AVG: bureau.CREDIT_ACTIVE (window: None)
+  - AVG: bureau.CREDIT_CURRENCY (window: None)
+  - AVG: bureau.DAYS_CREDIT (window: None)
+  - AVG: bureau.CREDIT_DAY_OVERDUE (window: None)
+  - AVG: bureau.DAYS_CREDIT_ENDDATE (window: None)
+  - AVG: bureau.DAYS_ENDDATE_FACT (window: None)
+  - AVG: bureau.AMT_CREDIT_MAX_OVERDUE (window: None)
+  - AVG: bureau.CNT_CREDIT_PROLONG (window: None)
+  - AVG: bureau.AMT_CREDIT_SUM (window: None)
+  - AVG: bureau.AMT_CREDIT_SUM_DEBT (window: None)
+  - AVG: bureau.AMT_CREDIT_SUM_LIMIT (window: None)
+  - AVG: bureau.AMT_CREDIT_SUM_OVERDUE (window: None)
+  - AVG: bureau.CREDIT_TYPE (window: None)
+  - AVG: bureau.DAYS_CREDIT_UPDATE (window: None)
+  - AVG: bureau.AMT_ANNUITY (window: None)
+  - AVG: bureau.BB_MONTHS_COUNT (window: None)
+  - AVG: bureau.BB_MONTHS_MIN (window: None)
+  - AVG: bureau.BB_MONTHS_MAX (window: None)
+  - AVG: bureau.STATUS_0 (window: None)
+  - AVG: bureau.STATUS_1 (window: None)
+  - AVG: bureau.STATUS_2 (window: None)
+  - AVG: bureau.STATUS_3 (window: None)
+  - AVG: bureau.STATUS_4 (window: None)
+  - AVG: bureau.STATUS_5 (window: None)
+  - AVG: bureau.STATUS_C (window: None)
+  - AVG: bureau.STATUS_X (window: None)
+  - AVG: bureau.BB_DPD_ANY_COUNT (window: None)
+  - AVG: bureau.BB_DPD_SERIOUS_COUNT (window: None)
+  - AVG: bureau.BB_DPD_RATIO (window: None)
+  - AVG: installments_payments.NUM_INSTALMENT_VERSION (window: None)
+  - AVG: installments_payments.NUM_INSTALMENT_NUMBER (window: None)
+  - AVG: installments_payments.DAYS_INSTALMENT (window: None)
+  - AVG: installments_payments.DAYS_ENTRY_PAYMENT (window: None)
+  - AVG: installments_payments.AMT_INSTALMENT (window: None)
+  - AVG: installments_payments.AMT_PAYMENT (window: None)
+  - AVG: previous_application.NAME_CONTRACT_TYPE (window: None)
+  - AVG: previous_application.AMT_ANNUITY (window: None)
+  - AVG: previous_application.AMT_APPLICATION (window: None)
+  - AVG: previous_application.AMT_CREDIT (window: None)
+  - AVG: previous_application.AMT_DOWN_PAYMENT (window: None)
+  - AVG: previous_application.AMT_GOODS_PRICE (window: None)
+  - AVG: previous_application.WEEKDAY_APPR_PROCESS_START (window: None)
+  - AVG: previous_application.HOUR_APPR_PROCESS_START (window: None)
+  - AVG: previous_application.FLAG_LAST_APPL_PER_CONTRACT (window: None)
+  - AVG: previous_application.NFLAG_LAST_APPL_IN_DAY (window: None)
+  - AVG: previous_application.RATE_DOWN_PAYMENT (window: None)
+  - AVG: previous_application.RATE_INTEREST_PRIMARY (window: None)
+  - AVG: previous_application.RATE_INTEREST_PRIVILEGED (window: None)
+  - AVG: previous_application.NAME_CASH_LOAN_PURPOSE (window: None)
+  - AVG: previous_application.NAME_CONTRACT_STATUS (window: None)
+  - AVG: previous_application.DAYS_DECISION (window: None)
+  - AVG: previous_application.NAME_PAYMENT_TYPE (window: None)
+  - AVG: previous_application.CODE_REJECT_REASON (window: None)
+  - AVG: previous_application.NAME_TYPE_SUITE (window: None)
+  - AVG: previous_application.NAME_CLIENT_TYPE (window: None)
+  - AVG: previous_application.NAME_GOODS_CATEGORY (window: None)
+  - AVG: previous_application.NAME_PORTFOLIO (window: None)
+  - AVG: previous_application.NAME_PRODUCT_TYPE (window: None)
+  - AVG: previous_application.CHANNEL_TYPE (window: None)
+  - AVG: previous_application.SELLERPLACE_AREA (window: None)
+  - AVG: previous_application.NAME_SELLER_INDUSTRY (window: None)
+  - AVG: previous_application.CNT_PAYMENT (window: None)
+  - AVG: previous_application.NAME_YIELD_GROUP (window: None)
+  - AVG: previous_application.PRODUCT_COMBINATION (window: None)
+  - AVG: previous_application.DAYS_FIRST_DRAWING (window: None)
+  - AVG: previous_application.DAYS_FIRST_DUE (window: None)
+  - AVG: previous_application.DAYS_LAST_DUE_1ST_VERSION (window: None)
+  - AVG: previous_application.DAYS_LAST_DUE (window: None)
+  - AVG: previous_application.DAYS_TERMINATION (window: None)
+  - AVG: previous_application.NFLAG_INSURED_ON_APPROVAL (window: None)
+  - AVG: previous_application.POS_MONTHS_COUNT (window: None)
+  - AVG: previous_application.POS_MONTHS_MIN (window: None)
+  - AVG: previous_application.POS_MONTHS_MAX (window: None)
+  - AVG: previous_application.POS_DPD_MAX (window: None)
+  - AVG: previous_application.POS_DPD_MEAN (window: None)
+  - AVG: previous_application.POS_DPD_SUM (window: None)
+  - AVG: previous_application.POS_DPD_DEF_MAX (window: None)
+  - AVG: previous_application.POS_DPD_DEF_MEAN (window: None)
+  - AVG: previous_application.POS_STATUS_Active (window: None)
+  - AVG: previous_application.POS_STATUS_Approved (window: None)
+  - AVG: previous_application.POS_STATUS_Canceled (window: None)
+  - AVG: previous_application.POS_STATUS_Completed (window: None)
+  - AVG: previous_application.POS_STATUS_Demand (window: None)
+  - AVG: previous_application.POS_STATUS_Returned to the store (window: None)
+  - AVG: previous_application.POS_STATUS_Signed (window: None)
+  - AVG: previous_application.POS_INSTALMENT_MEAN (window: None)
+  - AVG: previous_application.POS_INSTALMENT_MAX (window: None)
+  - AVG: previous_application.POS_FUTURE_MEAN (window: None)
+  - AVG: previous_application.POS_FUTURE_MIN (window: None)
+  - AVG: previous_application.POS_DPD_POSITIVE_COUNT (window: None)
+  - AVG: previous_application.CC_MONTHS_COUNT (window: None)
+  - AVG: previous_application.CC_MONTHS_MIN (window: None)
+  - AVG: previous_application.CC_MONTHS_MAX (window: None)
+  - AVG: previous_application.CC_BALANCE_MEAN (window: None)
+  - AVG: previous_application.CC_BALANCE_MAX (window: None)
+  - AVG: previous_application.CC_BALANCE_MIN (window: None)
+  - AVG: previous_application.CC_BALANCE_STD (window: None)
+  - AVG: previous_application.CC_LIMIT_MEAN (window: None)
+  - AVG: previous_application.CC_LIMIT_MAX (window: None)
+  - AVG: previous_application.CC_ATM_DRAWINGS_SUM (window: None)
+  - AVG: previous_application.CC_ATM_DRAWINGS_MEAN (window: None)
+  - AVG: previous_application.CC_DRAWINGS_SUM (window: None)
+  - AVG: previous_application.CC_DRAWINGS_MEAN (window: None)
+  - AVG: previous_application.CC_PAYMENT_SUM (window: None)
+  - AVG: previous_application.CC_PAYMENT_MEAN (window: None)
+  - AVG: previous_application.CC_PAYMENT_MIN (window: None)
+  - AVG: previous_application.CC_MIN_PAYMENT_MEAN (window: None)
+  - AVG: previous_application.CC_DPD_MAX (window: None)
+  - AVG: previous_application.CC_DPD_MEAN (window: None)
+  - AVG: previous_application.CC_DPD_DEF_MAX (window: None)
+  - AVG: previous_application.CC_DPD_DEF_MEAN (window: None)
+  - AVG: previous_application.CC_UTILIZATION_MEAN (window: None)
+  - AVG: previous_application.CC_MIN_PAYMENT_MISS_COUNT (window: None)
